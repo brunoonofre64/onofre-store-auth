@@ -5,7 +5,3 @@ services:
     container_name: onofre-store
     ports:
       - "8081:8081"
-  redis:
-    image: redis
-    ports:
-      - "6379:6379"

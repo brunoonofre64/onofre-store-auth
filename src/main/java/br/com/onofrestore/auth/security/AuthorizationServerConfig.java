@@ -1,7 +1,7 @@
 package br.com.onofrestore.auth.security;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -12,8 +12,7 @@ import org.springframework.security.oauth2.config.annotation.web.configurers.Aut
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
 import org.springframework.security.oauth2.provider.CompositeTokenGranter;
 import org.springframework.security.oauth2.provider.TokenGranter;
-import org.springframework.security.oauth2.provider.token.TokenStore;
-import org.springframework.security.oauth2.provider.token.store.redis.RedisTokenStore;
+import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
 
 import java.util.Arrays;
 
@@ -24,14 +23,12 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
-    private final RedisConnectionFactory redisConnectionFactory;
 
     public AuthorizationServerConfig(PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager,
-                                     UserDetailsService userDetailsService, RedisConnectionFactory redisConnectionFactory) {
+                                     UserDetailsService userDetailsService) {
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.userDetailsService = userDetailsService;
-        this.redisConnectionFactory = redisConnectionFactory;
     }
 
     @Override
@@ -59,7 +56,6 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
 
     @Override
     public void configure(AuthorizationServerSecurityConfigurer security) throws Exception {
-//        security.checkTokenAccess("isAuthenticated()");
         security.checkTokenAccess("permitAll()")
                 .allowFormAuthenticationForClients();
     }
@@ -69,12 +65,16 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
         endpoints.authenticationManager(authenticationManager)
                 .userDetailsService(userDetailsService)
                 .reuseRefreshTokens(false)
-                .tokenStore(redisTokenStore())
+                .accessTokenConverter(jwtAccessTokenConverter())
                 .tokenGranter(tokenGranter(endpoints));
     }
 
-    private TokenStore redisTokenStore() {
-        return new RedisTokenStore(redisConnectionFactory);
+    @Bean
+    public JwtAccessTokenConverter jwtAccessTokenConverter() {
+        JwtAccessTokenConverter jwtAccessTokenConverter = new JwtAccessTokenConverter();
+        jwtAccessTokenConverter.setSigningKey("apoksd92oaisdkpi28ajsndaosdn8923u3839qAOSID9");
+
+        return jwtAccessTokenConverter;
     }
 
     private TokenGranter tokenGranter(AuthorizationServerEndpointsConfigurer endpoints) {
