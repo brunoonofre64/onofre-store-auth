@@ -1,4 +1,4 @@
-package br.com.onofrestore.auth.security;
+package br.com.onofrestore.auth.core.security;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;

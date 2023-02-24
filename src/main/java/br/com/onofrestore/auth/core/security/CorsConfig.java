@@ -1,4 +1,4 @@
-package br.com.onofrestore.auth.security;
+package br.com.onofrestore.auth.core.security;
 
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;

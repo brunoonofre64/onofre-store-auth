@@ -1,7 +1,9 @@
-package br.com.onofrestore.auth.security;
+package br.com.onofrestore.auth.core.security;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -12,24 +14,24 @@ import org.springframework.security.oauth2.config.annotation.web.configurers.Aut
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
 import org.springframework.security.oauth2.provider.CompositeTokenGranter;
 import org.springframework.security.oauth2.provider.TokenGranter;
+import org.springframework.security.oauth2.provider.approval.ApprovalStore;
+import org.springframework.security.oauth2.provider.approval.TokenApprovalStore;
+import org.springframework.security.oauth2.provider.token.TokenEnhancerChain;
+import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
+import org.springframework.security.oauth2.provider.token.store.KeyStoreKeyFactory;
 
 import java.util.Arrays;
 
 @Configuration
 @EnableAuthorizationServer
+@RequiredArgsConstructor
 public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdapter {
 
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
-
-    public AuthorizationServerConfig(PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager,
-                                     UserDetailsService userDetailsService) {
-        this.passwordEncoder = passwordEncoder;
-        this.authenticationManager = authenticationManager;
-        this.userDetailsService = userDetailsService;
-    }
+    private final JwtKeyStoreProperties jwtKeyStoreProperties;
 
     @Override
     public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
@@ -57,22 +59,44 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
     @Override
     public void configure(AuthorizationServerSecurityConfigurer security) throws Exception {
         security.checkTokenAccess("permitAll()")
+                .tokenKeyAccess("permitAll()")
                 .allowFormAuthenticationForClients();
     }
 
     @Override
     public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+        var enhancerChain = new TokenEnhancerChain();
+        enhancerChain.setTokenEnhancers(
+                Arrays.asList(new JwtCustomClaimsTokenEnhancer(), jwtAccessTokenConverter()));
+
         endpoints.authenticationManager(authenticationManager)
                 .userDetailsService(userDetailsService)
                 .reuseRefreshTokens(false)
                 .accessTokenConverter(jwtAccessTokenConverter())
+                .tokenEnhancer(enhancerChain)
+                .approvalStore(approvalStore(endpoints.getTokenStore()))
                 .tokenGranter(tokenGranter(endpoints));
+    }
+
+    private ApprovalStore approvalStore(TokenStore tokenStore) {
+        var approvalStore = new TokenApprovalStore();
+        approvalStore.setTokenStore(tokenStore);
+
+        return approvalStore;
     }
 
     @Bean
     public JwtAccessTokenConverter jwtAccessTokenConverter() {
-        JwtAccessTokenConverter jwtAccessTokenConverter = new JwtAccessTokenConverter();
-        jwtAccessTokenConverter.setSigningKey("apoksd92oaisdkpi28ajsndaosdn8923u3839qAOSID9");
+        var jwtAccessTokenConverter = new JwtAccessTokenConverter();
+
+        var jskResource = new ClassPathResource(jwtKeyStoreProperties.getPath());
+        var keyStorePass = jwtKeyStoreProperties.getPassword();
+        var keyPairAlias = jwtKeyStoreProperties.getKeyPairAlias();
+
+        var keyStoreKeyFactory = new KeyStoreKeyFactory(jskResource, keyStorePass.toCharArray());
+        var keyPair = keyStoreKeyFactory.getKeyPair(keyPairAlias);
+
+        jwtAccessTokenConverter.setKeyPair(keyPair);
 
         return jwtAccessTokenConverter;
     }
