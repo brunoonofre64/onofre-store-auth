@@ -1,12 +1,15 @@
 package br.com.onofrestore.auth.core.security;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.KeyUse;
+import com.nimbusds.jose.jwk.RSAKey;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
@@ -21,6 +24,9 @@ import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
 import org.springframework.security.oauth2.provider.token.store.KeyStoreKeyFactory;
 
+import javax.sql.DataSource;
+import java.security.KeyPair;
+import java.security.interfaces.RSAPublicKey;
 import java.util.Arrays;
 
 @Configuration
@@ -28,43 +34,25 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdapter {
 
-    private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final UserDetailsService userDetailsService;
     private final JwtKeyStoreProperties jwtKeyStoreProperties;
+    private final DataSource dataSource;
 
     @Override
     public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
-        clients
-                .inMemory()
-                .withClient("onofre-web")
-                .secret(passwordEncoder.encode("1234"))
-                .authorizedGrantTypes("password", "refresh_token")
-                .scopes("write", "read")
-                .accessTokenValiditySeconds(24 * 60 * 60)
-                .refreshTokenValiditySeconds(60 * 24 * 60 * 60)
-                .and()
-                .withClient("faturamento")
-                .secret(passwordEncoder.encode("fat123"))
-                .authorizedGrantTypes("client_credentials")
-                .scopes("write", "read")
-                .and()
-                .withClient("analytics")
-                .secret(passwordEncoder.encode("ana123"))
-                .authorizedGrantTypes("authorization_code")
-                .scopes("write", "read")
-                .redirectUris("http://www.onofrestore-analytics.com");
+        clients.jdbc(dataSource);
     }
 
     @Override
-    public void configure(AuthorizationServerSecurityConfigurer security) throws Exception {
+    public void configure(AuthorizationServerSecurityConfigurer security) {
         security.checkTokenAccess("permitAll()")
                 .tokenKeyAccess("permitAll()")
                 .allowFormAuthenticationForClients();
     }
 
     @Override
-    public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+    public void configure(AuthorizationServerEndpointsConfigurer endpoints) {
         var enhancerChain = new TokenEnhancerChain();
         enhancerChain.setTokenEnhancers(
                 Arrays.asList(new JwtCustomClaimsTokenEnhancer(), jwtAccessTokenConverter()));
@@ -86,17 +74,29 @@ public class AuthorizationServerConfig extends AuthorizationServerConfigurerAdap
     }
 
     @Bean
-    public JwtAccessTokenConverter jwtAccessTokenConverter() {
-        var jwtAccessTokenConverter = new JwtAccessTokenConverter();
+    public JWKSet jwkSet() {
+        RSAKey.Builder builder = new RSAKey.Builder((RSAPublicKey) keyPair().getPublic())
+                .keyUse(KeyUse.SIGNATURE)
+                .algorithm(JWSAlgorithm.RS256)
+                .keyID("onofre-key-id");
 
+        return new JWKSet(builder.build());
+    }
+
+    private KeyPair keyPair() {
         var jskResource = new ClassPathResource(jwtKeyStoreProperties.getPath());
         var keyStorePass = jwtKeyStoreProperties.getPassword();
         var keyPairAlias = jwtKeyStoreProperties.getKeyPairAlias();
 
         var keyStoreKeyFactory = new KeyStoreKeyFactory(jskResource, keyStorePass.toCharArray());
-        var keyPair = keyStoreKeyFactory.getKeyPair(keyPairAlias);
+       return keyStoreKeyFactory.getKeyPair(keyPairAlias);
+    }
 
-        jwtAccessTokenConverter.setKeyPair(keyPair);
+    @Bean
+    public JwtAccessTokenConverter jwtAccessTokenConverter() {
+        var jwtAccessTokenConverter = new JwtAccessTokenConverter();
+
+        jwtAccessTokenConverter.setKeyPair(keyPair());
 
         return jwtAccessTokenConverter;
     }
